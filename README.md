@@ -2,7 +2,8 @@
 
 ------
 
-自己想的一种方式写出来的SQL注入检测的小工具
+自己想的一种方式写出来的SQL注入检测的小工具<br>
+
 目前还在开发中，仅增加了Mysql基于布尔类型的盲注检测功能
     
     http://localhost/test/test.php?id=1" AND MID(DATABASE(),3,1)="p
