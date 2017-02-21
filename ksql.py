@@ -71,7 +71,7 @@ def run(tmpUrl, num, succPageSize, frontThread):
 			print '================: ' + word
 			break
 			
-		print "I was listening to %s \r\n" %(ctime())
+		print "Time: %s \r\n" %(ctime())
 		time.sleep(0.1)
 	
 	
