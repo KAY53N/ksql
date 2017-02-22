@@ -8,7 +8,7 @@ Automatic SQL injection and database takeover tool<br>
 
 
 ## Installation
-You can download the latest tarball by clicking [![here]](https://github.com/kaysen820/ksql/tarball/master) or latest zipball by clicking [![here]](https://github.com/kaysen820/ksql/zipball/master).<br>
+You can download the latest tarball by clicking [here](https://github.com/kaysen820/ksql/tarball/master) or latest zipball by clicking [here](https://github.com/kaysen820/ksql/zipball/master).<br>
 Preferably, you can download ksql by cloning the Git repository:<br>
 ```
 git clone --depth 1 https://github.com/kaysen820/ksql ksql-dev
