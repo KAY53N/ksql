@@ -19,7 +19,7 @@ ksql works out of the box with Python version 2.6.x and 2.7.x on any platform.
 ## Usage
 To get a list of basic options and switches use:<br>
 ```
-python sqlmap.py -h
+python ksql.py -h
 ```
 
 ## Blind SQL injection
