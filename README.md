@@ -1,21 +1,29 @@
-# Ksql - Blind SQL Injection
+# Ksql
+Automatic SQL injection and database takeover tool<br>
 
 ------
 
-按照自己的想法实现的SQL注入工具，采用多线程。<br>
+## Screenshots
+![ksql](http://www.xujiantao.com/public/images/ksql.jpg)
 
 
-支持的功能:
-- [x] 获取当前数据库名
-- [x] 获取当前用户名
+## Installation
+You can download the latest tarball by clicking [![here]](https://github.com/kaysen820/ksql/tarball/master) or latest zipball by clicking [![here]](https://github.com/kaysen820/ksql/zipball/master).<br>
+Preferably, you can download ksql by cloning the Git repository:<br>
+```
+git clone --depth 1 https://github.com/kaysen820/ksql ksql-dev
+```
+ksql works out of the box with Python version 2.6.x and 2.7.x on any platform.
 
 
+## Usage
+To get a list of basic options and switches use:<br>
+```
+python sqlmap.py -h
+```
 
 ## Blind SQL injection
 - [x] Boolean-based blind SQL injection
 - [ ] Time-based blind SQL injection
 - [ ] Error-based SQL injection
 
-
-
-![ksql预览图](http://www.xujiantao.com/public/images/ksql.jpg)
