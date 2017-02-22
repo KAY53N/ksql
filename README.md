@@ -6,15 +6,15 @@
 
 
 支持的功能:
-- [x] 当前数据库名
-- [x] 当前用户名
+- [x] 获取当前数据库名
+- [x] 获取当前用户名
 
 
 
 ## Blind SQL injection
 - [x] Boolean-based blind SQL injection
-- [-] Time-based blind SQL injection
-- [-] Error-based SQL injection
+- [ ] Time-based blind SQL injection
+- [ ] Error-based SQL injection
 
 
 
