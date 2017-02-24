@@ -26,4 +26,6 @@ python ksql.py -h
 - [x] Boolean-based blind SQL injection
 - [ ] Time-based blind SQL injection
 - [ ] Error-based SQL injection
+- [ ] UNION query SQL injection
+- [ ] Stacked queries SQL injection
 
