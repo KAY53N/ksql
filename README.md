@@ -1,5 +1,5 @@
 # Ksql
-Automatic SQL injection and database takeover tool<br>
+Ksql is an open source penetration testing tool that automates the process of detecting and exploiting SQL injection flaws and taking over of database servers.Using mutiple threads to scaning<br>
 
 ------
 
