@@ -4,6 +4,10 @@ Automatic SQL injection and database takeover tool<br>
 ------
 
 ## Screenshots
+```
+python ksql.py -u "http://localhost/test/test.php?id=1&name=kaysen" --current-user
+```
+<br>
 ![ksql](http://www.xujiantao.com/public/images/ksql.jpg)
 
 
