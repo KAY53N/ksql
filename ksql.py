@@ -6,12 +6,14 @@
 	version:	Ksql 1.0
 """
 
-import sys, os, io, inspect, string, time, urllib, re, urlparse, difflib, chardet, filecmp, json, getopt, datetime, ctypes, threading, sqlite3
+import sys, os, io, inspect, string, time, urllib, re, urlparse, difflib, chardet
+import filecmp, json, getopt, datetime, ctypes, threading, sqlite3, timeit
 from difflib import *
 from time import ctime,sleep
 
 reload(sys)
 sys.setdefaultencoding('utf8')
+Timer = timeit.Timer()  
 
 def set_cmd_text_color(color, handle=ctypes.windll.kernel32.GetStdHandle(-11)):
 	Bool = ctypes.windll.kernel32.SetConsoleTextAttribute(handle, color)
@@ -227,5 +229,7 @@ def main(argv):
 if __name__ == '__main__':
 	main(sys.argv)
 	sqlliteCon.close()
-    
+	
+	print Timer.timeit()
+	#printDarkYellow('Runtime: ' + runtime)
     
