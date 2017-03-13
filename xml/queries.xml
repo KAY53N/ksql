@@ -2,10 +2,10 @@
 
 <root>
     <!-- MySQL -->
-    <dbms value="MySQL">
+    <mysql>
         <banner query="VERSION()"/>
-        <current_user query="CURRENT_USER()"/>
+        <current_user query="USER()"/>
         <current_db query="DATABASE()"/>
         <hostname query="@@HOSTNAME"/>
-    </dbms>
+    </mysql>
 </root>

