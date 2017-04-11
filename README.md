@@ -8,7 +8,8 @@ Ksql is an open source penetration testing tool that automates the process of de
 python ksql.py -u "http://localhost/test/test.php?id=1&name=kaysen" --current-user
 ```
 <br>
-![ksql](https://github.com/kaysen820/ksql/blob/master/screenshots/ksql_20170314.png)
+
+![ksql](./screenshots/ksql_20170314.png)
 
 
 ## Installation
